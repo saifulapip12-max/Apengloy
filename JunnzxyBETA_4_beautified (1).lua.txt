@@ -1,0 +1,2094 @@
+local HUB_TITLE = "Rework V0.1"
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
+local function getLogoImage()
+    return "rbxthumb://type=Asset&id=96207938623338&w=420&h=420"
+end
+getgenv().PP = getgenv().PP or {}
+local State = getgenv().PP
+local CLEANUP_STEPS = {
+    function() getgenv().HubStop() end,
+    function() getgenv().FarmStop() end,
+    function() getgenv().T3FStop() end,
+    function() getgenv().DFStop() end,
+    function() getgenv().CWStop() end,
+    function() getgenv().DG:Destroy() end,
+    function() game:GetService("CoreGui").Junnzxy:Destroy() end,
+    function() gethui().Junnzxy:Destroy() end,
+    function() LocalPlayer.PlayerGui.Junnzxy:Destroy() end,
+    function() gethui().JunnzxyFarm:Destroy() end,
+    function() game:GetService("CoreGui").JunnzxyFarm:Destroy() end,
+    function() LocalPlayer.PlayerGui.JunnzxyFarm:Destroy() end,
+    function() gethui().DFGui:Destroy() end,
+    function() LocalPlayer.PlayerGui.DFGui:Destroy() end,
+    function() game:GetService("CoreGui").CWTestGui:Destroy() end,
+    function() gethui().CWTestGui:Destroy() end,
+    function() LocalPlayer.PlayerGui.CWTestGui:Destroy() end,
+}
+for _, step in ipairs(CLEANUP_STEPS) do
+    pcall(step)
+end
+State.seen = State.seen or {}
+getgenv().PosHandler = function(remote, payload)
+    if typeof(payload) ~= "buffer" then
+        return
+    end
+    local payloadLen = buffer.len(payload)
+    local opcode = payloadLen > 0 and buffer.readu8(payload, 0) or -1
+    local seenKey = remote.Name .. "|op" .. opcode .. "|len" .. payloadLen
+    State.seen[seenKey] = (State.seen[seenKey] or 0) + 1
+    if opcode == 8 and payloadLen >= 9 then
+        State.y = buffer.readf32(payload, 1)
+        State.x = buffer.readf32(payload, 5)
+    end
+end
+if not getgenv().PosHook2 then
+    getgenv().PosHook2 = true
+    local hookOk = pcall(function()
+        local oldNamecall
+        oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(selfObj, ...)
+            if typeof(selfObj) == "Instance" and getnamecallmethod() == "FireServer" and not checkcaller() and string.find(selfObj.Name, "ByteNet") then
+                local firstArg = ...
+                pcall(getgenv().PosHandler, selfObj, firstArg)
+            end
+            return oldNamecall(selfObj, ...)
+        end))
+    end)
+    if not hookOk then
+        getgenv().PosHook2 = false
+    end
+end
+local function getPacketDiagnostics()
+    local lines = {}
+    for packetKey, seenCount in pairs(State.seen) do
+        lines[#lines + 1] = packetKey .. " x" .. seenCount
+    end
+    table.sort(lines)
+    if #lines == 0 then
+        return "Belum ada paket ByteNet tertangkap sama sekali."
+    end
+    return table.concat(lines, "\n")
+end
+getgenv().PosDiag = function()
+    print(getPacketDiagnostics())
+    print("P.x =", State.x, "P.y =", State.y)
+end
+local Theme = {
+    bg = Color3.fromRGB(12, 12, 18),
+    panel = Color3.fromRGB(18, 18, 27),
+    card = Color3.fromRGB(25, 25, 37),
+    card2 = Color3.fromRGB(32, 32, 48),
+    line = Color3.fromRGB(48, 44, 90),
+    acc = Color3.fromRGB(124, 92, 255),
+    acc2 = Color3.fromRGB(70, 200, 255),
+    wh = Color3.fromRGB(240, 240, 250),
+    dm = Color3.fromRGB(140, 140, 168),
+    ON = Color3.fromRGB(60, 210, 120),
+    OFF = Color3.fromRGB(58, 58, 78),
+    RED = Color3.fromRGB(235, 80, 90),
+    YEL = Color3.fromRGB(255, 190, 70),
+}
+local Fonts = {
+    b = Enum.Font.GothamBold,
+    r = Enum.Font.Gotham,
+    m = Enum.Font.GothamMedium,
+}
+local function create(className, props, parent)
+    local instance = Instance.new(className)
+    pcall(function()
+        instance.BorderSizePixel = 0
+    end)
+    for propName, propValue in pairs(props) do
+        pcall(function()
+            instance[propName] = propValue
+        end)
+    end
+    instance.Parent = parent
+    return instance
+end
+local function addCorner(cornerTarget, cornerRadius)
+    pcall(function()
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, cornerRadius)
+        corner.Parent = cornerTarget
+    end)
+end
+local function addStroke(strokeTarget, strokeColor, strokeThickness, strokeTransparency)
+    local stroke
+    pcall(function()
+        stroke = Instance.new("UIStroke")
+        stroke.Color = strokeColor
+        stroke.Thickness = strokeThickness or 1
+        stroke.Transparency = strokeTransparency or 0
+        stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        stroke.Parent = strokeTarget
+    end)
+    return stroke
+end
+local function addGradient(gradientTarget, colorA, colorB, gradientRotation)
+    pcall(function()
+        local gradient = Instance.new("UIGradient")
+        gradient.Color = ColorSequence.new(colorA, colorB)
+        gradient.Rotation = gradientRotation or 0
+        gradient.Parent = gradientTarget
+    end)
+end
+local function addPadding(paddingTarget, padTop, padLeft, padRight, padBottom)
+    create("UIPadding", {
+        PaddingTop = UDim.new(0, padTop or 0),
+        PaddingLeft = UDim.new(0, padLeft or 0),
+        PaddingRight = UDim.new(0, padRight or 0),
+        PaddingBottom = UDim.new(0, padBottom or 0),
+    }, paddingTarget)
+end
+local function tween(tweenTarget, tweenDuration, tweenGoal, easingStyle, easingDirection)
+    local tweenOk, tweenObj = pcall(function()
+        return TweenService:Create(tweenTarget, TweenInfo.new(tweenDuration, easingStyle or Enum.EasingStyle.Quad, easingDirection or Enum.EasingDirection.Out), tweenGoal)
+    end)
+    if tweenOk and tweenObj then
+        tweenObj:Play()
+        return tweenObj
+    end
+end
+local function addHoverStroke(hoverButton)
+    local hoverStroke = addStroke(hoverButton, Theme.acc2, 1, 1)
+    if not hoverStroke then
+        return
+    end
+    hoverButton.MouseEnter:Connect(function()
+        tween(hoverStroke, 0.15, {Transparency = 0.25})
+    end)
+    hoverButton.MouseLeave:Connect(function()
+        tween(hoverStroke, 0.15, {Transparency = 1})
+    end)
+end
+local Connections = {}
+local StopCallbacks = {}
+local function stopAll(stopArg)
+    for _, stopFn in ipairs(StopCallbacks) do
+        pcall(stopFn, stopArg)
+    end
+end
+local closeHub
+local ScreenGui = create("ScreenGui", {
+    Name = "Junnzxy",
+    ResetOnSpawn = false,
+    DisplayOrder = 999999,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, nil)
+local UI_SCALE = math.clamp(math.min(workspace.CurrentCamera.ViewportSize.X / 600, workspace.CurrentCamera.ViewportSize.Y / 400), 0.6, 1)
+local MainFrame = create("Frame", {
+    Size = UDim2.new(0, 540, 0, 360),
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    BackgroundColor3 = Theme.bg,
+    Active = true,
+}, ScreenGui)
+addCorner(MainFrame, 14)
+addStroke(MainFrame, Theme.line, 1.5)
+local MainScale = create("UIScale", {Scale = UI_SCALE}, MainFrame)
+local TopBar = create("Frame", {
+    Size = UDim2.new(1, 0, 0, 46),
+    BackgroundColor3 = Theme.panel,
+    Active = true,
+}, MainFrame)
+addCorner(TopBar, 14)
+create("Frame", {
+    Size = UDim2.new(1, 0, 0, 14),
+    Position = UDim2.new(0, 0, 1, -14),
+    BackgroundColor3 = Theme.panel,
+}, TopBar)
+local AccentLine = create("Frame", {
+    Size = UDim2.new(1, 0, 0, 2),
+    Position = UDim2.new(0, 0, 0, 46),
+    BackgroundColor3 = Theme.wh,
+}, MainFrame)
+addGradient(AccentLine, Theme.acc, Theme.acc2)
+local LogoLabel = create("TextLabel", {
+    Size = UDim2.new(0, 30, 0, 30),
+    Position = UDim2.new(0, 10, 0.5, -15),
+    BackgroundColor3 = Theme.wh,
+    Text = "J",
+    TextColor3 = Theme.wh,
+    TextSize = 17,
+    Font = Fonts.b,
+}, TopBar)
+addCorner(LogoLabel, 9)
+addGradient(LogoLabel, Theme.acc, Theme.acc2, 45)
+create("TextLabel", {
+    Size = UDim2.new(0, 160, 0, 18),
+    Position = UDim2.new(0, 48, 0, 7),
+    BackgroundTransparency = 1,
+    Text = HUB_TITLE,
+    TextColor3 = Theme.wh,
+    TextSize = 15,
+    Font = Fonts.b,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, TopBar)
+create("TextLabel", {
+    Size = UDim2.new(0, 220, 0, 14),
+    Position = UDim2.new(0, 48, 0, 25),
+    BackgroundTransparency = 1,
+    Text = "Farm  •  Collect  •  Info",
+    TextColor3 = Theme.dm,
+    TextSize = 10,
+    Font = Fonts.r,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, TopBar)
+local VersionBadge = create("TextLabel", {
+    Size = UDim2.new(0, 42, 0, 16),
+    Position = UDim2.new(0, 148, 0, 8),
+    BackgroundColor3 = Theme.card2,
+    Text = "V0.1",
+    TextColor3 = Theme.acc2,
+    TextSize = 10,
+    Font = Fonts.b,
+}, TopBar)
+addCorner(VersionBadge, 8)
+local MinimizeButton = create("TextButton", {
+    Size = UDim2.new(0, 28, 0, 26),
+    Position = UDim2.new(1, -72, 0.5, -13),
+    AutoButtonColor = false,
+    BackgroundColor3 = Theme.card,
+    Text = "–",
+    TextColor3 = Theme.wh,
+    TextSize = 16,
+    Font = Fonts.b,
+}, TopBar)
+addCorner(MinimizeButton, 8)
+addHoverStroke(MinimizeButton)
+local CloseButton = create("TextButton", {
+    Size = UDim2.new(0, 28, 0, 26),
+    Position = UDim2.new(1, -38, 0.5, -13),
+    AutoButtonColor = false,
+    BackgroundColor3 = Theme.RED,
+    Text = "X",
+    TextColor3 = Theme.wh,
+    TextSize = 13,
+    Font = Fonts.b,
+}, TopBar)
+addCorner(CloseButton, 8)
+addHoverStroke(CloseButton)
+local Sidebar = create("Frame", {
+    Size = UDim2.new(0, 136, 1, -96),
+    Position = UDim2.new(0, 10, 0, 58),
+    BackgroundColor3 = Theme.panel,
+}, MainFrame)
+addCorner(Sidebar, 10)
+local TabList = create("ScrollingFrame", {
+    Size = UDim2.new(1, 0, 1, -54),
+    BackgroundTransparency = 1,
+    ScrollBarThickness = 2,
+    ScrollBarImageColor3 = Theme.acc,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+}, Sidebar)
+create("UIListLayout", {
+    Padding = UDim.new(0, 3),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, TabList)
+addPadding(TabList, 6, 6, 6, 6)
+local ProfileCard = create("Frame", {
+    Size = UDim2.new(1, -12, 0, 42),
+    Position = UDim2.new(0, 6, 1, -48),
+    BackgroundColor3 = Theme.card,
+}, Sidebar)
+addCorner(ProfileCard, 8)
+local AvatarImage = create("ImageLabel", {
+    Size = UDim2.new(0, 30, 0, 30),
+    Position = UDim2.new(0, 6, 0.5, -15),
+    BackgroundColor3 = Theme.bg,
+    Image = "",
+}, ProfileCard)
+addCorner(AvatarImage, 15)
+create("TextLabel", {
+    Size = UDim2.new(1, -46, 0, 14),
+    Position = UDim2.new(0, 42, 0, 7),
+    BackgroundTransparency = 1,
+    Text = LocalPlayer.DisplayName,
+    TextColor3 = Theme.wh,
+    TextSize = 11,
+    Font = Fonts.b,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+}, ProfileCard)
+create("TextLabel", {
+    Size = UDim2.new(1, -46, 0, 12),
+    Position = UDim2.new(0, 42, 0, 22),
+    BackgroundTransparency = 1,
+    Text = "@" .. LocalPlayer.Name,
+    TextColor3 = Theme.dm,
+    TextSize = 9,
+    Font = Fonts.r,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+}, ProfileCard)
+task.spawn(function()
+    local thumbOk, thumbUrl = pcall(function()
+        return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+    end)
+    if thumbOk and thumbUrl then
+        AvatarImage.Image = thumbUrl
+    end
+end)
+local ContentArea = create("Frame", {
+    Size = UDim2.new(1, -166, 1, -96),
+    Position = UDim2.new(0, 156, 0, 58),
+    BackgroundTransparency = 1,
+}, MainFrame)
+local PageTitle = create("TextLabel", {
+    Size = UDim2.new(1, 0, 0, 20),
+    BackgroundTransparency = 1,
+    Text = "",
+    TextColor3 = Theme.wh,
+    TextSize = 17,
+    Font = Fonts.b,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, ContentArea)
+local PageDesc = create("TextLabel", {
+    Size = UDim2.new(1, 0, 0, 14),
+    Position = UDim2.new(0, 0, 0, 21),
+    BackgroundTransparency = 1,
+    Text = "",
+    TextColor3 = Theme.dm,
+    TextSize = 11,
+    Font = Fonts.r,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, ContentArea)
+local PageContainer = create("Frame", {
+    Size = UDim2.new(1, 0, 1, -42),
+    Position = UDim2.new(0, 0, 0, 42),
+    BackgroundTransparency = 1,
+    ClipsDescendants = true,
+}, ContentArea)
+local StatusBar = create("Frame", {
+    Size = UDim2.new(1, -20, 0, 26),
+    Position = UDim2.new(0, 10, 1, -32),
+    BackgroundColor3 = Theme.panel,
+}, MainFrame)
+addCorner(StatusBar, 8)
+local StatusDot = create("Frame", {
+    Size = UDim2.new(0, 8, 0, 8),
+    Position = UDim2.new(0, 10, 0.5, -4),
+    BackgroundColor3 = Theme.ON,
+}, StatusBar)
+addCorner(StatusDot, 4)
+local StatusLabel = create("TextLabel", {
+    Size = UDim2.new(1, -170, 1, 0),
+    Position = UDim2.new(0, 24, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "Siap",
+    TextColor3 = Theme.dm,
+    TextSize = 11,
+    Font = Fonts.m,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+}, StatusBar)
+create("TextLabel", {
+    Size = UDim2.new(0, 140, 1, 0),
+    Position = UDim2.new(1, -150, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "RightShift = sembunyikan",
+    TextColor3 = Theme.OFF,
+    TextSize = 10,
+    Font = Fonts.r,
+    TextXAlignment = Enum.TextXAlignment.Right,
+}, StatusBar)
+local function setStatus(statusText, statusColor)
+    StatusLabel.Text = tostring(statusText)
+    StatusDot.BackgroundColor3 = statusColor or Theme.ON
+end
+local NotifyHolder = create("Frame", {
+    Size = UDim2.new(0, 240, 0, 300),
+    AnchorPoint = Vector2.new(1, 1),
+    Position = UDim2.new(1, -12, 1, -12),
+    BackgroundTransparency = 1,
+}, ScreenGui)
+create("UIListLayout", {
+    Padding = UDim.new(0, 6),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    VerticalAlignment = Enum.VerticalAlignment.Bottom,
+}, NotifyHolder)
+local notifyCount = 0
+local function notify(notifyText, notifyColor)
+    notifyCount = notifyCount + 1
+    local notifyWrapper = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 42),
+        BackgroundTransparency = 1,
+        LayoutOrder = notifyCount,
+    }, NotifyHolder)
+    local notifyCard = create("Frame", {
+        Size = UDim2.new(1, 0, 1, 0),
+        Position = UDim2.new(1, 30, 0, 0),
+        BackgroundColor3 = Theme.panel,
+    }, notifyWrapper)
+    addCorner(notifyCard, 8)
+    addStroke(notifyCard, Theme.line, 1)
+    local notifyAccent = create("Frame", {
+        Size = UDim2.new(0, 3, 1, -14),
+        Position = UDim2.new(0, 7, 0, 7),
+        BackgroundColor3 = notifyColor or Theme.acc,
+    }, notifyCard)
+    addCorner(notifyAccent, 2)
+    create("TextLabel", {
+        Size = UDim2.new(1, -26, 1, 0),
+        Position = UDim2.new(0, 18, 0, 0),
+        BackgroundTransparency = 1,
+        Text = tostring(notifyText),
+        TextColor3 = Theme.wh,
+        TextSize = 11,
+        Font = Fonts.m,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, notifyCard)
+    tween(notifyCard, 0.3, {Position = UDim2.new(0, 0, 0, 0)}, Enum.EasingStyle.Back)
+    task.delay(2.8, function()
+        tween(notifyCard, 0.25, {Position = UDim2.new(1, 30, 0, 0)})
+        task.wait(0.3)
+        pcall(function()
+            notifyWrapper:Destroy()
+        end)
+    end)
+end
+if not pcall(function()
+    ScreenGui.Parent = gethui()
+end) or not ScreenGui.Parent then
+    if not pcall(function()
+        ScreenGui.Parent = game:GetService("CoreGui")
+    end) or not ScreenGui.Parent then
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    end
+end
+getgenv().DG = ScreenGui
+local Tabs, layoutCounter, currentTab = {}, 0, nil
+local function nextOrder()
+    layoutCounter = layoutCounter + 1
+    return layoutCounter
+end
+local function selectTab(tabName)
+    if currentTab == tabName then
+        return
+    end
+    currentTab = tabName
+    for otherTabName, tabData in pairs(Tabs) do
+        local isSelected = otherTabName == tabName
+        tween(tabData.btn, 0.18, {BackgroundTransparency = isSelected and 0.35 or 1})
+        tween(tabData.ind, 0.18, {BackgroundTransparency = isSelected and 0 or 1})
+        tween(tabData.tl, 0.18, {TextColor3 = isSelected and Theme.wh or Theme.dm})
+        tabData.page.Visible = isSelected
+        if isSelected then
+            PageTitle.Text = otherTabName
+            PageDesc.Text = tabData.desc or ""
+            tabData.page.Position = UDim2.new(0, 14, 0, 0)
+            tween(tabData.page, 0.22, {Position = UDim2.new(0, 0, 0, 0)})
+        end
+    end
+end
+local function createTab(newTabName, tabIcon, tabDesc)
+    local tabButton = create("TextButton", {
+        Size = UDim2.new(1, 0, 0, 26),
+        BackgroundColor3 = Theme.card,
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        LayoutOrder = nextOrder(),
+    }, TabList)
+    addCorner(tabButton, 7)
+    local tabIndicator = create("Frame", {
+        Size = UDim2.new(0, 3, 0, 14),
+        Position = UDim2.new(0, 0, 0.5, -7),
+        BackgroundColor3 = Theme.acc,
+        BackgroundTransparency = 1,
+    }, tabButton)
+    addCorner(tabIndicator, 2)
+    create("TextLabel", {
+        Size = UDim2.new(0, 22, 1, 0),
+        Position = UDim2.new(0, 8, 0, 0),
+        BackgroundTransparency = 1,
+        Text = tabIcon,
+        TextSize = 13,
+        TextColor3 = Theme.wh,
+        Font = Fonts.b,
+    }, tabButton)
+    local tabLabel = create("TextLabel", {
+        Size = UDim2.new(1, -36, 1, 0),
+        Position = UDim2.new(0, 32, 0, 0),
+        BackgroundTransparency = 1,
+        Text = newTabName,
+        TextColor3 = Theme.dm,
+        TextSize = 11,
+        Font = Fonts.b,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, tabButton)
+    local tabPage = create("ScrollingFrame", {
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = Theme.acc,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Visible = false,
+    }, PageContainer)
+    create("UIListLayout", {
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, tabPage)
+    addPadding(tabPage, 2, 0, 8, 8)
+    Tabs[newTabName] = {
+        btn = tabButton,
+        ind = tabIndicator,
+        tl = tabLabel,
+        page = tabPage,
+        desc = tabDesc,
+    }
+    tabButton.Activated:Connect(function()
+        selectTab(newTabName)
+    end)
+    return tabPage
+end
+local function createSection(sectionParent, sectionTitle)
+    create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 22),
+        BackgroundTransparency = 1,
+        Text = string.upper(sectionTitle),
+        TextColor3 = Theme.acc2,
+        TextSize = 10,
+        Font = Fonts.b,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Bottom,
+        LayoutOrder = nextOrder(),
+    }, sectionParent)
+end
+local function createToggle(toggleParent, toggleText, toggleDefault, toggleCallback)
+    local toggleFrame = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 36),
+        BackgroundColor3 = Theme.card,
+        LayoutOrder = nextOrder(),
+    }, toggleParent)
+    addCorner(toggleFrame, 8)
+    create("TextLabel", {
+        Size = UDim2.new(1, -66, 1, 0),
+        Position = UDim2.new(0, 12, 0, 0),
+        BackgroundTransparency = 1,
+        Text = toggleText,
+        TextColor3 = Theme.wh,
+        TextSize = 12,
+        Font = Fonts.r,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+    }, toggleFrame)
+    local toggleTrack = create("Frame", {
+        Size = UDim2.new(0, 40, 0, 20),
+        Position = UDim2.new(1, -52, 0.5, -10),
+        BackgroundColor3 = toggleDefault and Theme.ON or Theme.OFF,
+    }, toggleFrame)
+    addCorner(toggleTrack, 10)
+    local toggleKnob = create("Frame", {
+        Size = UDim2.new(0, 16, 0, 16),
+        Position = UDim2.new(0, toggleDefault and 22 or 2, 0.5, -8),
+        BackgroundColor3 = Theme.wh,
+    }, toggleTrack)
+    addCorner(toggleKnob, 8)
+    local toggleHitbox = create("TextButton", {
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "",
+    }, toggleFrame)
+    addCorner(toggleHitbox, 8)
+    addHoverStroke(toggleHitbox)
+    local toggle = {state = toggleDefault == true}
+    toggle.get = function()
+        return toggle.state
+    end
+    toggle.set = function(newState, silent)
+        toggle.state = newState
+        tween(toggleTrack, 0.18, {BackgroundColor3 = newState and Theme.ON or Theme.OFF})
+        tween(toggleKnob, 0.18, {Position = UDim2.new(0, newState and 22 or 2, 0.5, -8)})
+        if toggleCallback and not silent then
+            task.spawn(toggleCallback, newState)
+        end
+    end
+    toggleHitbox.Activated:Connect(function()
+        toggle.set(not toggle.state)
+    end)
+    return toggle
+end
+local function createInputBox(inputParent, inputLabel, inputDefault, fullWidth)
+    local inputFrame = create("Frame", {
+        Size = fullWidth and UDim2.new(1, 0, 1, 0) or UDim2.new(0.5, -3, 1, 0),
+        BackgroundColor3 = Theme.card,
+    }, inputParent)
+    addCorner(inputFrame, 8)
+    create("TextLabel", {
+        Size = UDim2.new(1, -16, 0, 14),
+        Position = UDim2.new(0, 8, 0, 5),
+        BackgroundTransparency = 1,
+        Text = inputLabel,
+        TextColor3 = Theme.dm,
+        TextSize = 10,
+        Font = Fonts.m,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+    }, inputFrame)
+    local textBox = create("TextBox", {
+        Size = UDim2.new(1, -16, 0, 22),
+        Position = UDim2.new(0, 8, 0, 21),
+        BackgroundColor3 = Theme.bg,
+        Text = tostring(inputDefault),
+        TextColor3 = Theme.wh,
+        TextSize = 12,
+        Font = Fonts.b,
+        ClearTextOnFocus = false,
+    }, inputFrame)
+    addCorner(textBox, 6)
+    local textBoxStroke = addStroke(textBox, Theme.line, 1)
+    if textBoxStroke then
+        textBox.Focused:Connect(function()
+            tween(textBoxStroke, 0.15, {Color = Theme.acc})
+        end)
+        textBox.FocusLost:Connect(function()
+            tween(textBoxStroke, 0.15, {Color = Theme.line})
+        end)
+    end
+    return textBox
+end
+local function createInputRow(rowParent, leftLabel, leftDefault, rightLabel, rightDefault)
+    local rowFrame = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 50),
+        BackgroundTransparency = 1,
+        LayoutOrder = nextOrder(),
+    }, rowParent)
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, rowFrame)
+    local leftBox = createInputBox(rowFrame, leftLabel, leftDefault, rightLabel == nil)
+    local rightBox = rightLabel and createInputBox(rowFrame, rightLabel, rightDefault) or nil
+    return leftBox, rightBox
+end
+local function createButton(buttonParent, buttonText, buttonCallback, buttonColor)
+    local button = create("TextButton", {
+        Size = UDim2.new(1, 0, 0, 34),
+        BackgroundColor3 = buttonColor or Theme.acc,
+        Text = buttonText,
+        AutoButtonColor = false,
+        TextColor3 = Theme.wh,
+        TextSize = 12,
+        Font = Fonts.b,
+        LayoutOrder = nextOrder(),
+    }, buttonParent)
+    addCorner(button, 8)
+    addHoverStroke(button)
+    button.Activated:Connect(function()
+        tween(button, 0.08, {TextTransparency = 0.4})
+        task.delay(0.1, function()
+            tween(button, 0.12, {TextTransparency = 0})
+        end)
+        buttonCallback()
+    end)
+    return button
+end
+local function createNote(noteParent, noteText)
+    create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        Text = noteText,
+        TextColor3 = Theme.dm,
+        TextSize = 10,
+        Font = Fonts.r,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        LayoutOrder = nextOrder(),
+    }, noteParent)
+end
+local function makeDraggable(dragHandle, dragTarget, onClick)
+    local dragging, dragStart, startPos, dragMoved = false, nil, nil, false
+    dragHandle.InputBegan:Connect(function(inputBegin)
+        if inputBegin.UserInputType == Enum.UserInputType.MouseButton1 or inputBegin.UserInputType == Enum.UserInputType.Touch then
+            dragging, dragMoved = true, false
+            dragStart, startPos = inputBegin.Position, dragTarget.Position
+            inputBegin.Changed:Connect(function()
+                if inputBegin.UserInputState == Enum.UserInputState.End then
+                    if dragging and not dragMoved and onClick then
+                        onClick()
+                    end
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    Connections[#Connections + 1] = UserInputService.InputChanged:Connect(function(inputMove)
+        if dragging and (inputMove.UserInputType == Enum.UserInputType.MouseMovement or inputMove.UserInputType == Enum.UserInputType.Touch) then
+            local dragDelta = inputMove.Position - dragStart
+            if dragDelta.Magnitude > 4 then
+                dragMoved = true
+            end
+            dragTarget.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + dragDelta.X, startPos.Y.Scale, startPos.Y.Offset + dragDelta.Y)
+        end
+    end)
+end
+local cachedMoveToRemote = nil
+local function getRemotes()
+    if not (cachedMoveToRemote and cachedMoveToRemote.Parent) then
+        cachedMoveToRemote = nil
+        for _, rsDescendant in ipairs(ReplicatedStorage:GetDescendants()) do
+            if rsDescendant.Name == "MoveTo" and rsDescendant:IsA("RemoteEvent") then
+                cachedMoveToRemote = rsDescendant
+                break
+            end
+        end
+    end
+    return ReplicatedStorage:FindFirstChild("ByteNetReliable"), cachedMoveToRemote
+end
+local function buildActionPacket(actionId, packetX, packetY)
+    local actionBuf = buffer.create(10)
+    buffer.writeu8(actionBuf, 0, 3)
+    buffer.writef32(actionBuf, 1, packetY)
+    buffer.writeu8(actionBuf, 5, actionId)
+    buffer.writef32(actionBuf, 6, packetX)
+    return actionBuf
+end
+local function buildPlacePacket(placeTileX, placeTileY, placeBlockId)
+    local placeBuf = buffer.create(9)
+    buffer.writeu8(placeBuf, 0, 32)
+    buffer.writeu16(placeBuf, 1, placeTileY)
+    buffer.writeu16(placeBuf, 3, placeTileX)
+    buffer.writeu8(placeBuf, 5, 0)
+    buffer.writeu16(placeBuf, 6, placeBlockId)
+    buffer.writeu8(placeBuf, 8, 1)
+    return placeBuf
+end
+local cachedInventory, cachedInventoryUI = nil, nil
+local function findInventory(forceRefresh)
+    if not forceRefresh and cachedInventory and type(rawget(cachedInventory, "slots")) == "table" then
+        return cachedInventory, cachedInventoryUI
+    end
+    cachedInventory, cachedInventoryUI = nil, nil
+    if not getgc then
+        return nil, nil
+    end
+    local gcOk, gcList = pcall(getgc, true)
+    if not gcOk or type(gcList) ~= "table" then
+        return nil, nil
+    end
+    for _, gcObj in ipairs(gcList) do
+        if type(gcObj) == "table" then
+            if rawget(gcObj, "capacity") and type(rawget(gcObj, "slots")) == "table" then
+                local invSlots = rawget(gcObj, "slots")
+                if rawget(gcObj, "selected") ~= nil or rawget(invSlots, 1) ~= nil then
+                    cachedInventory = gcObj
+                end
+            end
+            if not cachedInventoryUI and type(rawget(gcObj, "refresh")) == "function" and rawget(gcObj, "screen") ~= nil then
+                cachedInventoryUI = gcObj
+            end
+        end
+    end
+    return cachedInventory, cachedInventoryUI
+end
+local function getItemCount(countItemId, refreshInv)
+    local inventory = findInventory(refreshInv)
+    if not inventory then
+        inventory = findInventory(true)
+    end
+    if not inventory then
+        return nil
+    end
+    local slots = rawget(inventory, "slots")
+    if type(slots) ~= "table" then
+        return nil
+    end
+    local total = 0
+    for _, slot in pairs(slots) do
+        if type(slot) == "table" and tonumber(rawget(slot, "id")) == countItemId then
+            total = total + (tonumber(rawget(slot, "n")) or 0)
+        end
+    end
+    return total
+end
+local function consumeItem(consumeId, consumeAmount)
+    consumeAmount = tonumber(consumeAmount) or 1
+    if consumeAmount <= 0 then
+        return
+    end
+    pcall(function()
+        local inv, invUI = findInventory(false)
+        if not inv then
+            inv, invUI = findInventory(true)
+        end
+        if not inv then
+            return
+        end
+        local invSlotList = rawget(inv, "slots")
+        if type(invSlotList) ~= "table" then
+            return
+        end
+        local remaining = consumeAmount
+        for slotIndex, invSlot in pairs(invSlotList) do
+            if type(invSlot) == "table" and tonumber(rawget(invSlot, "id")) == consumeId then
+                local slotCount = tonumber(rawget(invSlot, "n")) or 0
+                if slotCount > remaining then
+                    rawset(invSlot, "n", slotCount - remaining)
+                    remaining = 0
+                    break
+                else
+                    remaining = remaining - slotCount
+                    invSlotList[slotIndex] = nil
+                    if remaining <= 0 then
+                        break
+                    end
+                end
+            end
+        end
+        if invUI and type(rawget(invUI, "refresh")) == "function" then
+            task.spawn(rawget(invUI, "refresh"))
+        end
+    end)
+end
+local setTileFn, dropListFn, worldState = nil, nil, nil
+local function findGameFunctions(forceScan)
+    if not forceScan and setTileFn then
+        return setTileFn
+    end
+    pcall(function()
+        local worldRemotes = ReplicatedStorage:FindFirstChild("WorldRemotes")
+        local tileChanged = worldRemotes and worldRemotes:FindFirstChild("TileChanged")
+        if tileChanged and getconnections then
+            for _, connection in ipairs(getconnections(tileChanged.OnClientEvent)) do
+                if connection.Function then
+                    local upOk, upvalues = pcall(debug.getupvalues, connection.Function)
+                    if upOk and type(upvalues) == "table" and type(upvalues[2]) == "function" then
+                        setTileFn = upvalues[2]
+                    end
+                end
+            end
+        end
+    end)
+    if getgc then
+        pcall(function()
+            for _, gcItem in ipairs(getgc(true)) do
+                if type(gcItem) == "function" then
+                    local infoOk, sourceName, funcName = pcall(function()
+                        local infoSource, _, infoName = debug.info(gcItem, "sln")
+                        return infoSource, tostring(infoName or "")
+                    end)
+                    if infoOk and sourceName and tostring(sourceName):find("GameGui.Game") then
+                        if funcName == "setTile" and not setTileFn then
+                            setTileFn = gcItem
+                        elseif funcName == "dropList" then
+                            dropListFn = gcItem
+                        elseif funcName == "hit" or funcName == "act" then
+                            local hitUpOk, hitUpvalues = pcall(debug.getupvalues, gcItem)
+                            if hitUpOk and type(hitUpvalues) == "table" then
+                                for _, upvalue in pairs(hitUpvalues) do
+                                    if type(upvalue) == "table" and type(rawget(upvalue, "fg")) == "table" and type(rawget(upvalue, "w")) == "number" then
+                                        worldState = upvalue
+                                    end
+                                end
+                            end
+                        end
+                    end
+                elseif type(gcItem) == "table" then
+                    if not worldState and type(rawget(gcItem, "fg")) == "table" and type(rawget(gcItem, "w")) == "number" then
+                        worldState = gcItem
+                    end
+                end
+            end
+        end)
+    end
+    return setTileFn
+end
+local function getTileId(queryX, queryY)
+    if not worldState then
+        return nil
+    end
+    local fgGrid, worldWidth = rawget(worldState, "fg"), rawget(worldState, "w")
+    if type(fgGrid) == "table" and type(worldWidth) == "number" and worldWidth > 0 then
+        local cell = fgGrid[queryY * worldWidth + queryX + 1]
+        if type(cell) == "number" then
+            return cell
+        end
+        if type(cell) == "table" then
+            return tonumber(rawget(cell, "id")) or 0
+        end
+    end
+    return nil
+end
+local function callSetTile(layer, setX, setY, setId, setExtra)
+    local setTile = findGameFunctions(true)
+    if setTile then
+        if setExtra ~= nil then
+            pcall(setTile, layer, setX, setY, setId, setExtra)
+        else
+            pcall(setTile, layer, setX, setY, setId)
+        end
+        return true
+    end
+    return false
+end
+local cachedDropList = nil
+local function isDropCollected(drop)
+    if rawget(drop, "pending") or rawget(drop, "picked") then
+        return true
+    end
+    if rawget(drop, "from") ~= nil then
+        return true
+    end
+    local dropFrame = rawget(drop, "frame")
+    if dropFrame ~= nil and typeof(dropFrame) == "Instance" and dropFrame.Parent == nil then
+        return true
+    end
+    return false
+end
+local function isDropEntry(entry)
+    if type(entry) ~= "table" or isDropCollected(entry) then
+        return false
+    end
+    local entryX = rawget(entry, "x") or rawget(entry, "X") or rawget(entry, "px")
+    local entryY = rawget(entry, "y") or rawget(entry, "Y") or rawget(entry, "py")
+    if type(entryX) == "number" and type(entryY) == "number" and entryX >= 0 and entryX <= 200 and entryY >= 0 and entryY <= 200 then
+        if rawget(entry, "id") ~= nil or rawget(entry, "item") ~= nil or rawget(entry, "itemId") ~= nil or rawget(entry, "count") ~= nil or rawget(entry, "n") ~= nil or rawget(entry, "uid") ~= nil then
+            if rawget(entry, "capacity") == nil and rawget(entry, "slots") == nil and rawget(entry, "fg") == nil then
+                return true
+            end
+        end
+    end
+    local entryPos = rawget(entry, "pos") or rawget(entry, "position") or rawget(entry, "p")
+    local entryPosType = typeof(entryPos)
+    if (entryPosType == "Vector2" or entryPosType == "Vector3") and entryPos.X >= 0 and entryPos.X <= 200 and entryPos.Y >= 0 and entryPos.Y <= 200 then
+        if rawget(entry, "id") ~= nil or rawget(entry, "item") ~= nil or rawget(entry, "count") ~= nil or rawget(entry, "n") ~= nil then
+            return true
+        end
+    end
+    return false
+end
+local function getDropPosition(dropEntry)
+    local dropX = rawget(dropEntry, "x") or rawget(dropEntry, "X") or rawget(dropEntry, "px")
+    local dropY = rawget(dropEntry, "y") or rawget(dropEntry, "Y") or rawget(dropEntry, "py")
+    if type(dropX) == "number" and type(dropY) == "number" then
+        return dropX, dropY
+    end
+    local dropPos = rawget(dropEntry, "pos") or rawget(dropEntry, "position") or rawget(dropEntry, "p")
+    local dropPosType = typeof(dropPos)
+    if dropPosType == "Vector2" or dropPosType == "Vector3" then
+        return dropPos.X, dropPos.Y
+    end
+    return nil, nil
+end
+local function findDropsNear(centerX, centerY, searchRadius)
+    searchRadius = searchRadius or 4.5
+    local found, visited = {}, {}
+    local function scanTable(tbl)
+        if type(tbl) ~= "table" then
+            return
+        end
+        for _, candidate in pairs(tbl) do
+            if type(candidate) == "table" and not visited[candidate] and isDropEntry(candidate) then
+                local candX, candY = getDropPosition(candidate)
+                if candX and candY and math.abs(candX - (centerX + 0.5)) <= searchRadius and math.abs(candY - (centerY + 0.5)) <= searchRadius then
+                    visited[candidate] = true
+                    found[#found + 1] = {
+                        raw = candidate,
+                        x = candX,
+                        y = candY,
+                        cx = math.floor(candX),
+                        cy = math.floor(candY - 0.001),
+                    }
+                end
+            end
+        end
+    end
+    findGameFunctions(false)
+    if dropListFn then
+        local dlOk, dlResult = pcall(dropListFn)
+        if dlOk and type(dlResult) == "table" then
+            scanTable(dlResult)
+            return found
+        else
+            local dlUpOk, dlUpvalues = pcall(debug.getupvalues, dropListFn)
+            if dlUpOk and type(dlUpvalues) == "table" then
+                for _, dlUpvalue in pairs(dlUpvalues) do
+                    if type(dlUpvalue) == "table" then
+                        scanTable(dlUpvalue)
+                        if #found > 0 then
+                            return found
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if #found == 0 and cachedDropList then
+        scanTable(cachedDropList)
+    end
+    if #found == 0 and getgc then
+        local gcOk2, gcList2 = pcall(getgc, true)
+        if gcOk2 and type(gcList2) == "table" then
+            for _, gcTable in ipairs(gcList2) do
+                if type(gcTable) == "table" then
+                    local dropTable = rawget(gcTable, "drops") or rawget(gcTable, "dropList")
+                    if type(dropTable) == "table" then
+                        local beforeCount = #found
+                        scanTable(dropTable)
+                        if #found > beforeCount then
+                            cachedDropList = dropTable
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return found
+end
+local heldKey = nil
+local function sendKey(keyCode, isPressed)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(isPressed, keyCode, false, game)
+    end)
+end
+local function releaseMoveKeys()
+    heldKey = nil
+    sendKey(Enum.KeyCode.A, false)
+    sendKey(Enum.KeyCode.D, false)
+end
+local function holdMoveKey(moveKey)
+    if heldKey ~= moveKey then
+        releaseMoveKeys()
+        sendKey(moveKey, true)
+        heldKey = moveKey
+    end
+end
+local function jump()
+    sendKey(Enum.KeyCode.Space, true)
+    task.wait(0.12)
+    sendKey(Enum.KeyCode.Space, false)
+end
+local function toCell(posX, posY)
+    return math.floor(posX), math.floor(posY - 0.001)
+end
+local function teleport(tpX, tpY)
+    local _, moveToRemote = getRemotes()
+    if moveToRemote then
+        pcall(firesignal, moveToRemote.OnClientEvent, tpX, tpY)
+    end
+    State.x, State.y = tpX, tpY
+end
+local function moveToPoint(targetX, targetY, waitItems, maxWait, shouldStop)
+    releaseMoveKeys()
+    maxWait = maxWait or 0.18
+    teleport(targetX, targetY)
+    local startTime = os.clock()
+    local lastTp = startTime
+    while not (shouldStop and shouldStop()) and os.clock() - startTime < maxWait do
+        if type(waitItems) == "table" and #waitItems > 0 then
+            local allCollected, pendingItem = true, nil
+            for _, waitItem in ipairs(waitItems) do
+                if not isDropCollected(waitItem) then
+                    allCollected = false
+                    pendingItem = waitItem
+                    break
+                end
+            end
+            if allCollected then
+                break
+            end
+            if os.clock() - lastTp >= 0.05 then
+                lastTp = os.clock()
+                local itemX, itemY = getDropPosition(pendingItem)
+                if itemX and itemY then
+                    teleport(itemX, itemY)
+                else
+                    teleport(targetX, targetY)
+                end
+            end
+        elseif os.clock() - lastTp >= 0.06 then
+            lastTp = os.clock()
+            teleport(targetX, targetY)
+        end
+        task.wait(0.03)
+    end
+end
+local function teleportToCell(cellX, cellY, cellWait, cellStop)
+    moveToPoint(cellX + 0.5, cellY + 0.999, nil, cellWait, cellStop)
+end
+local function snapToCell(snapX, snapY, snapStop)
+    releaseMoveKeys()
+    for _ = 1, 3 do
+        if snapStop and snapStop() then
+            break
+        end
+        teleport(snapX + 0.5, snapY + 0.999)
+        task.wait(0.06)
+    end
+end
+local function walkToCell(goalX, goalY, walkStop, walkTimeout)
+    walkTimeout = walkTimeout or 35
+    local walkStart = os.clock()
+    local lastX, lastY, lastMoveTime = State.x or 0, State.y or 0, os.clock()
+    while not (walkStop and walkStop()) and os.clock() - walkStart < walkTimeout do
+        if not (State.x and State.y) then
+            task.wait(0.05)
+            continue
+        end
+        local curCellX, curCellY = toCell(State.x, State.y)
+        local diffX = goalX + 0.5 - State.x
+        if curCellX == goalX and curCellY == goalY and math.abs(diffX) < 0.28 then
+            releaseMoveKeys()
+            task.wait(0.08)
+            local checkX, checkY = toCell(State.x, State.y)
+            if checkX == goalX and checkY == goalY then
+                return true
+            end
+        end
+        if math.abs(diffX) > 0.12 then
+            holdMoveKey(diffX > 0 and Enum.KeyCode.D or Enum.KeyCode.A)
+        else
+            releaseMoveKeys()
+        end
+        if curCellY > goalY and math.abs(diffX) < 1.5 then
+            jump()
+        end
+        task.wait(0.03)
+        if math.abs(State.x - lastX) + math.abs(State.y - lastY) > 0.03 then
+            lastX, lastY, lastMoveTime = State.x, State.y, os.clock()
+        elseif os.clock() - lastMoveTime > 0.55 then
+            jump()
+            lastMoveTime = os.clock()
+        end
+    end
+    releaseMoveKeys()
+    if not (State.x and State.y) then
+        return false
+    end
+    local endX, endY = toCell(State.x, State.y)
+    return endX == goalX and endY == goalY
+end
+do
+    local farmPage = createTab("Farm", "🌱", "Farm 5x5 (Fixed)  •  Op32 & Op3  •  Auto Refill")
+    local posCard = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 26),
+        BackgroundColor3 = Theme.card,
+        LayoutOrder = nextOrder(),
+    }, farmPage)
+    addCorner(posCard, 8)
+    local posLabel = create("TextLabel", {
+        Size = UDim2.new(1, -16, 1, 0),
+        Position = UDim2.new(0, 8, 0, 0),
+        BackgroundTransparency = 1,
+        Text = "Posisi: belum terbaca (gerakkan karakter)",
+        TextColor3 = Theme.YEL,
+        TextSize = 11,
+        Font = Fonts.b,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, posCard)
+    task.spawn(function()
+        while ScreenGui.Parent do
+            if State.x and State.y then
+                local posCellX, posCellY = toCell(State.x, State.y)
+                posLabel.Text = string.format("Posisi: x=%.2f y=%.2f | sel (%d, %d)", State.x, State.y, posCellX, posCellY)
+                posLabel.TextColor3 = Theme.ON
+            else
+                posLabel.Text = "Posisi: belum terbaca (gerakkan karakter)"
+                posLabel.TextColor3 = Theme.YEL
+            end
+            task.wait(0.25)
+        end
+    end)
+    createSection(farmPage, "Selector Area 5x5 (Klik untuk Pilih)")
+    local gridCard = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 268),
+        BackgroundColor3 = Theme.card,
+        LayoutOrder = nextOrder(),
+    }, farmPage)
+    addCorner(gridCard, 10)
+    local selectedLabel = create("TextLabel", {
+        Size = UDim2.new(1, -20, 0, 20),
+        Position = UDim2.new(0, 10, 0, 6),
+        BackgroundTransparency = 1,
+        Text = "Terpilih: 0 tile (ME = tengah)",
+        TextColor3 = Theme.acc2,
+        TextSize = 11,
+        Font = Fonts.b,
+        TextXAlignment = Enum.TextXAlignment.Center,
+    }, gridCard)
+    local gridFrame = create("Frame", {
+        Size = UDim2.new(0, 200, 0, 200),
+        Position = UDim2.new(0.5, -100, 0, 30),
+        BackgroundTransparency = 1,
+    }, gridCard)
+    local selectedOrder, selectedSet, gridTiles = {}, {}, {}
+    local function refreshGrid()
+        for tileIndex, tileInfo in ipairs(gridTiles) do
+            if selectedSet[tileIndex] then
+                tileInfo.btn.BackgroundColor3 = Theme.acc
+                tileInfo.btn.TextColor3 = Theme.wh
+            elseif tileIndex == 13 then
+                tileInfo.btn.BackgroundColor3 = Theme.card2
+                tileInfo.btn.TextColor3 = Theme.YEL
+            else
+                tileInfo.btn.BackgroundColor3 = Theme.bg
+                tileInfo.btn.TextColor3 = Theme.dm
+            end
+        end
+        selectedLabel.Text = string.format("Terpilih: %d tile (ME = tengah)", #selectedOrder)
+    end
+    local tileCounter = 0
+    for gridRow = 0, 4 do
+        for gridCol = 0, 4 do
+            tileCounter = tileCounter + 1
+            local offsetX = gridCol - 2
+            local offsetY = gridRow - 2
+            local isCenter = tileCounter == 13
+            local tileButton = create("TextButton", {
+                Size = UDim2.new(0, 36, 0, 36),
+                Position = UDim2.new(0, gridCol * 41, 0, gridRow * 41),
+                BackgroundColor3 = Theme.bg,
+                Text = isCenter and "ME" or tostring(tileCounter),
+                TextColor3 = isCenter and Theme.YEL or Theme.dm,
+                TextSize = 11,
+                Font = Fonts.b,
+                AutoButtonColor = false,
+            }, gridFrame)
+            addCorner(tileButton, 6)
+            addStroke(tileButton, Theme.line, 1)
+            local tileNum = tileCounter
+            gridTiles[tileNum] = {btn = tileButton, dx = offsetX, dy = offsetY}
+            tileButton.Activated:Connect(function()
+                if selectedSet[tileNum] then
+                    selectedSet[tileNum] = nil
+                    for orderIdx, orderVal in ipairs(selectedOrder) do
+                        if orderVal == tileNum then
+                            table.remove(selectedOrder, orderIdx)
+                            break
+                        end
+                    end
+                else
+                    selectedSet[tileNum] = true
+                    table.insert(selectedOrder, tileNum)
+                end
+                refreshGrid()
+            end)
+        end
+    end
+    refreshGrid()
+    local btnTop3 = create("TextButton", {
+        Size = UDim2.new(0, 96, 0, 24),
+        Position = UDim2.new(0.5, -150, 0, 236),
+        BackgroundColor3 = Theme.card2,
+        Text = "Atas 3 (2,3,4)",
+        TextColor3 = Theme.wh,
+        TextSize = 10,
+        Font = Fonts.b,
+        AutoButtonColor = false,
+    }, gridCard)
+    addCorner(btnTop3, 6)
+    addHoverStroke(btnTop3)
+    local btnSelectAll = create("TextButton", {
+        Size = UDim2.new(0, 96, 0, 24),
+        Position = UDim2.new(0.5, -48, 0, 236),
+        BackgroundColor3 = Theme.card2,
+        Text = "Pilih Semua",
+        TextColor3 = Theme.wh,
+        TextSize = 10,
+        Font = Fonts.b,
+        AutoButtonColor = false,
+    }, gridCard)
+    addCorner(btnSelectAll, 6)
+    addHoverStroke(btnSelectAll)
+    local btnReset = create("TextButton", {
+        Size = UDim2.new(0, 96, 0, 24),
+        Position = UDim2.new(0.5, 54, 0, 236),
+        BackgroundColor3 = Theme.card2,
+        Text = "Reset Pilihan",
+        TextColor3 = Theme.wh,
+        TextSize = 10,
+        Font = Fonts.b,
+        AutoButtonColor = false,
+    }, gridCard)
+    addCorner(btnReset, 6)
+    addHoverStroke(btnReset)
+    btnTop3.Activated:Connect(function()
+        selectedOrder = {2, 3, 4}
+        selectedSet = {[2] = true, [3] = true, [4] = true}
+        refreshGrid()
+    end)
+    btnSelectAll.Activated:Connect(function()
+        selectedOrder = {}
+        selectedSet = {}
+        for allIdx = 1, 25 do
+            if allIdx ~= 13 then
+                selectedSet[allIdx] = true
+                table.insert(selectedOrder, allIdx)
+            end
+        end
+        refreshGrid()
+    end)
+    btnReset.Activated:Connect(function()
+        selectedOrder = {}
+        selectedSet = {}
+        refreshGrid()
+    end)
+    createSection(farmPage, "Pengaturan Block & Pukulan")
+    local boxBlockId, boxHits = createInputRow(farmPage, "ID Block Pasang", 2, "Hit Break (1-15)", 3)
+    createSection(farmPage, "Auto Ambil Block (Saat Stok Habis)")
+    local boxRefillX, boxRefillY = createInputRow(farmPage, "Ambil Block X", 50, "Ambil Block Y (berdiri)", 37)
+    local boxRefillThreshold, boxRefillWait = createInputRow(farmPage, "Ambil jika Block <", 20, "Tunggu Ambil (dtk)", 3)
+    createSection(farmPage, "Pengaturan Auto Collect")
+    local boxCollectDelay, boxVerifyMax = createInputRow(farmPage, "Jeda Collect/Titik (dtk)", 0.16, "Maks Verifikasi Sisa", 3)
+    local autoCollectToggle = createToggle(farmPage, "Auto Collect Setelah Break", false)
+    createButton(farmPage, "Diagnostik Posisi (paket ByteNet)", function()
+        local diagText = getPacketDiagnostics() .. "\nP.x=" .. tostring(State.x) .. "  P.y=" .. tostring(State.y)
+        print(diagText)
+        setStatus(diagText, Theme.YEL)
+        notify("Diagnostik dicetak ke console (F9)", Theme.YEL)
+    end, Theme.card2)
+    local function placeBlock(placeRemote, placeX, placeY, placeId, skipConsume)
+        if placeRemote then
+            placeRemote:FireServer(buildPlacePacket(placeX, placeY, placeId))
+        end
+        task.wait(0.02)
+        if placeRemote then
+            placeRemote:FireServer(buildActionPacket(placeId, placeX + 0.5, placeY + 0.5))
+        end
+        task.wait(0.025)
+        callSetTile("fg", placeX, placeY, placeId, true)
+        if not skipConsume then
+            consumeItem(placeId, 1)
+        end
+    end
+    local function breakBlock(breakRemote, breakX, breakY, hitCount, breakStop)
+        for _ = 1, hitCount do
+            if breakStop() then
+                return
+            end
+            if breakRemote then
+                breakRemote:FireServer(buildActionPacket(6, breakX + 0.5, breakY + 0.5))
+            end
+            task.wait(0.025)
+            if breakRemote then
+                breakRemote:FireServer(buildActionPacket(1, breakX + 0.551, breakY + 0.483))
+            end
+            task.wait(0.165)
+        end
+        task.wait(0.08)
+        callSetTile("fg", breakX, breakY, 0)
+        if breakRemote then
+            breakRemote:FireServer(buildPlacePacket(breakX, breakY, 0))
+        end
+    end
+    local function collectDrops(meX, meY, brokenTiles, collectDelay, verifyMax, collectStop)
+        local collectRadius = 4.5
+        findGameFunctions(false)
+        task.wait(0.22)
+        local dropGroups = {}
+        for _, nearDrop in ipairs(findDropsNear(meX, meY, collectRadius)) do
+            local groupKey = nearDrop.cx .. "," .. nearDrop.cy
+            if not dropGroups[groupKey] then
+                dropGroups[groupKey] = {x = nearDrop.x, y = nearDrop.y, items = {nearDrop.raw}}
+            else
+                local group = dropGroups[groupKey]
+                group.items[#group.items + 1] = nearDrop.raw
+            end
+        end
+        local visitedKeys = {}
+        for _, brokenTile in ipairs(brokenTiles) do
+            if collectStop() then
+                break
+            end
+            local clampX, clampY = math.clamp(brokenTile.x, 0, 99), math.clamp(brokenTile.y, 0, 59)
+            local tileKey = clampX .. "," .. clampY
+            visitedKeys[tileKey] = true
+            local tileGroup = dropGroups[tileKey]
+            setStatus(string.format("Collect Tile #%d -> (%d, %d)", brokenTile.num, clampX, clampY), Theme.ON)
+            if tileGroup then
+                moveToPoint(tileGroup.x, tileGroup.y, tileGroup.items, collectDelay, collectStop)
+            else
+                teleportToCell(clampX, clampY, collectDelay, collectStop)
+            end
+        end
+        for leftKey, leftGroup in pairs(dropGroups) do
+            if collectStop() then
+                break
+            end
+            if not visitedKeys[leftKey] then
+                moveToPoint(leftGroup.x, leftGroup.y, leftGroup.items, collectDelay, collectStop)
+            end
+        end
+        for verifyRound = 1, verifyMax do
+            if collectStop() then
+                break
+            end
+            task.wait(0.12)
+            local remainingDrops = findDropsNear(meX, meY, collectRadius)
+            if #remainingDrops == 0 then
+                break
+            end
+            setStatus(string.format("Verifikasi Sisa Drop #%d (%d item)...", verifyRound, #remainingDrops), Theme.ON)
+            for _, leftover in ipairs(remainingDrops) do
+                if collectStop() then
+                    break
+                end
+                if not isDropCollected(leftover.raw) then
+                    moveToPoint(leftover.x, leftover.y, {leftover.raw}, collectDelay, collectStop)
+                end
+            end
+        end
+        if not collectStop() then
+            snapToCell(meX, meY, collectStop)
+        end
+    end
+    createSection(farmPage, "Kontrol Farm")
+    local farmRunning, cycleCount, farmSession = false, 0, 0
+    local farmToggle
+    farmToggle = createToggle(farmPage, "Auto Pasang & Break", false, function(farmEnabled)
+        farmRunning = farmEnabled
+        farmSession = farmSession + 1
+        local mySession = farmSession
+        if not farmEnabled then
+            releaseMoveKeys()
+            setStatus("Farm berhenti", Theme.YEL)
+            return
+        end
+        if #selectedOrder == 0 then
+            setStatus("Pilih minimal 1 tile di atas!", Theme.RED)
+            notify("Farm: pilih minimal 1 tile!", Theme.RED)
+            farmRunning = false
+            farmToggle.set(false, true)
+            return
+        end
+        if not (State.x and State.y) then
+            setStatus("Posisi belum terbaca. Gerakkan karakter dulu!", Theme.RED)
+            notify("Farm: gerakkan karakter sedikit dulu!", Theme.RED)
+            print(getPacketDiagnostics())
+            farmRunning = false
+            farmToggle.set(false, true)
+            return
+        end
+        local byteNet = getRemotes()
+        if not byteNet then
+            setStatus("Remote ByteNetReliable tidak ketemu", Theme.RED)
+            notify("Farm: ByteNetReliable tidak ketemu", Theme.RED)
+            farmRunning = false
+            farmToggle.set(false, true)
+            return
+        end
+        findGameFunctions(true)
+        local homeX, homeY = toCell(State.x, State.y)
+        setStatus(string.format("Farm dimulai | ME=(%d, %d)", homeX, homeY), Theme.ON)
+        notify(string.format("Farm dimulai | ME=(%d, %d)", homeX, homeY), Theme.ON)
+        local farmShouldStop = function()
+            return not farmRunning or mySession ~= farmSession or not ScreenGui.Parent
+        end
+        while farmRunning and mySession == farmSession and ScreenGui.Parent do
+            local blockId = tonumber(boxBlockId.Text) or 2
+            local hitsPerBlock = math.clamp(math.floor(tonumber(boxHits.Text) or 3), 1, 15)
+            local refillX = math.floor(tonumber(boxRefillX.Text) or 50)
+            local refillY = math.floor(tonumber(boxRefillY.Text) or 37)
+            local refillThreshold = math.max(math.floor(tonumber(boxRefillThreshold.Text) or 20), 1)
+            local refillWait = math.max(tonumber(boxRefillWait.Text) or 3, 0.5)
+            local collectDelaySec = math.clamp(tonumber(boxCollectDelay.Text) or 0.16, 0.08, 1)
+            local verifyRounds = math.clamp(math.floor(tonumber(boxVerifyMax.Text) or 3), 1, 10)
+            local stock = getItemCount(blockId, true)
+            if stock ~= nil and stock < refillThreshold then
+                setStatus(string.format("Stok ID %d sisa %d (< %d) -> ambil ke (%d, %d)...", blockId, stock, refillThreshold, refillX, refillY), Theme.YEL)
+                if walkToCell(refillX, refillY, farmShouldStop, 45) then
+                    local waitStart = os.clock()
+                    while not farmShouldStop() and (os.clock() - waitStart < refillWait or (getItemCount(blockId, true) or 0) < refillThreshold) do
+                        if os.clock() - waitStart > math.max(refillWait + 6, 10) then
+                            break
+                        end
+                        task.wait(0.25)
+                    end
+                end
+                if farmShouldStop() then
+                    break
+                end
+                setStatus(string.format("Selesai ambil (stok: %s) -> balik ke ME (%d, %d)...", tostring(getItemCount(blockId, true) or "?"), homeX, homeY), Theme.ON)
+                walkToCell(homeX, homeY, farmShouldStop, 45)
+                snapToCell(homeX, homeY, farmShouldStop)
+            end
+            local nowX, nowY = toCell(State.x, State.y)
+            if nowX ~= homeX or nowY ~= homeY then
+                snapToCell(homeX, homeY, farmShouldStop)
+            else
+                teleport(homeX + 0.5, homeY + 0.999)
+                task.wait(0.06)
+            end
+            if farmShouldStop() then
+                break
+            end
+            local tileOrder = {}
+            for _, orderTile in ipairs(selectedOrder) do
+                tileOrder[#tileOrder + 1] = orderTile
+            end
+            for _, placeTileNum in ipairs(tileOrder) do
+                if farmShouldStop() then
+                    break
+                end
+                local placeOffset = gridTiles[placeTileNum]
+                local ptX, ptY = homeX + placeOffset.dx, homeY + placeOffset.dy
+                setStatus(string.format("Pasang Tile #%d di (%d, %d)", placeTileNum, ptX, ptY), Theme.ON)
+                placeBlock(byteNet, ptX, ptY, blockId, false)
+                task.wait(0.175)
+            end
+            task.wait(0.1)
+            for _, retryTileNum in ipairs(tileOrder) do
+                if farmShouldStop() then
+                    break
+                end
+                local retryOffset = gridTiles[retryTileNum]
+                local rtX, rtY = homeX + retryOffset.dx, homeY + retryOffset.dy
+                local currentId = getTileId(rtX, rtY)
+                if currentId ~= nil and currentId ~= blockId then
+                    setStatus(string.format("Retry Pasang Tile #%d di (%d, %d)", retryTileNum, rtX, rtY), Theme.ON)
+                    placeBlock(byteNet, rtX, rtY, blockId, true)
+                    task.wait(0.16)
+                end
+            end
+            task.wait(0.24)
+            local brokenList = {}
+            for _, breakTileNum in ipairs(tileOrder) do
+                if farmShouldStop() then
+                    break
+                end
+                local breakOffset = gridTiles[breakTileNum]
+                local btX, btY = homeX + breakOffset.dx, homeY + breakOffset.dy
+                brokenList[#brokenList + 1] = {x = btX, y = btY, num = breakTileNum}
+                setStatus(string.format("Break Tile #%d di (%d, %d) [%d hit]...", breakTileNum, btX, btY, hitsPerBlock), Theme.ON)
+                breakBlock(byteNet, btX, btY, hitsPerBlock, farmShouldStop)
+                task.wait(0.08)
+            end
+            if autoCollectToggle.get() and not farmShouldStop() then
+                collectDrops(homeX, homeY, brokenList, collectDelaySec, verifyRounds, farmShouldStop)
+            end
+            cycleCount = cycleCount + 1
+            setStatus(string.format("Farm berjalan | Siklus #%d | Stok ID %d: %s", cycleCount, blockId, tostring(getItemCount(blockId, true) or "?")), Theme.ON)
+            task.wait(0.15)
+        end
+        releaseMoveKeys()
+    end)
+    createNote(farmPage, "Gerakkan karakter, pastikan indikator Posisi di atas berwarna hijau, lalu pilih tile & nyalakan toggle Auto Pasang & Break.")
+    StopCallbacks[#StopCallbacks + 1] = function()
+        farmRunning = false
+        farmSession = farmSession + 1
+        releaseMoveKeys()
+        farmToggle.set(false, true)
+    end
+end
+do
+    local collectPage = createTab("Collect", "🧲", "Kejar item drop terdekat  •  v2")
+    createSection(collectPage, "Auto Collect")
+    local collectInfo = create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 56),
+        BackgroundColor3 = Theme.card,
+        LayoutOrder = nextOrder(),
+        Text = "Belum berjalan.",
+        TextColor3 = Theme.dm,
+        TextSize = 11,
+        Font = Fonts.r,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+    }, collectPage)
+    addCorner(collectInfo, 8)
+    addPadding(collectInfo, 6, 8, 8, 6)
+    local worldCache
+    local function isItemTable(itCandidate)
+        if type(itCandidate) ~= "table" then
+            return false
+        end
+        local itSecond = rawget(itCandidate, 2)
+        return type(itSecond) == "table" and rawget(itSecond, "name") ~= nil and rawget(itSecond, "solid") ~= nil
+    end
+    local function isWorldState(wsCandidate)
+        if type(wsCandidate) ~= "table" then
+            return false
+        end
+        local wsFg, wsBg = rawget(wsCandidate, "fg"), rawget(wsCandidate, "bg")
+        if type(wsFg) ~= "table" or type(wsBg) ~= "table" then
+            return false
+        end
+        local wsFirstCol = rawget(wsFg, 1)
+        return type(wsFirstCol) == "table" and #wsFirstCol >= 50
+    end
+    local function getWorld()
+        if worldCache and worldCache.fg then
+            return worldCache
+        end
+        local foundWorld, foundItems
+        local function scanUpvalues(scanFn)
+            local suOk, suUpvalues = pcall(debug.getupvalues, scanFn)
+            if not suOk or type(suUpvalues) ~= "table" then
+                return
+            end
+            for _, suValue in pairs(suUpvalues) do
+                if not foundWorld and isWorldState(suValue) then
+                    foundWorld = suValue
+                end
+                if not foundItems and isItemTable(suValue) then
+                    foundItems = suValue
+                end
+            end
+        end
+        for _, rsDesc in ipairs(ReplicatedStorage:GetDescendants()) do
+            if rsDesc:IsA("RemoteEvent") and rsDesc.Name == "TileChanged" then
+                local connOk, conns = pcall(getconnections, rsDesc.OnClientEvent)
+                if connOk and type(conns) == "table" then
+                    for _, conn in ipairs(conns) do
+                        local fnOk, connFn = pcall(function()
+                            return conn.Function
+                        end)
+                        if fnOk and type(connFn) == "function" then
+                            scanUpvalues(connFn)
+                        end
+                    end
+                end
+            end
+        end
+        if not (foundWorld and foundItems) then
+            return nil
+        end
+        worldCache = {
+            fg = foundWorld.fg,
+            items = foundItems,
+            w = foundWorld.w or 100,
+            h = foundWorld.h or 60,
+            state = foundWorld,
+        }
+        return worldCache
+    end
+    local function getFgId(fgX, fgY)
+        local fgWorld = getWorld()
+        if not fgWorld then
+            return 0
+        end
+        local fgColumn = fgWorld.fg[fgY]
+        local fgCell = fgColumn and fgColumn[fgX]
+        if type(fgCell) == "table" then
+            fgCell = fgCell[1] or fgCell.id
+        end
+        return tonumber(fgCell) or 0
+    end
+    local function isBlocked(blkX, blkY)
+        local blkWorld = getWorld()
+        if not blkWorld or blkX < 0 or blkX >= blkWorld.w or blkY < 0 or blkY >= blkWorld.h then
+            return true
+        end
+        local blkId = getFgId(blkX, blkY)
+        if blkId == 0 then
+            return false
+        end
+        local blkItem = blkWorld.items[blkId]
+        if not blkItem then
+            return true
+        end
+        return blkItem.solid == true or blkItem.hurts == true
+    end
+    local function findPath(fromX, fromY, toX, toY)
+        local function packKey(pkX, pkY)
+            return pkY * 256 + pkX
+        end
+        local cameFrom = {[packKey(fromX, fromY)] = false}
+        local queue, head = {{fromX, fromY}}, 1
+        local directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+        while head <= #queue and head < 6000 do
+            local node = queue[head]
+            head = head + 1
+            if node[1] == toX and node[2] == toY then
+                local path, step = {}, node
+                while step do
+                    table.insert(path, 1, step)
+                    step = cameFrom[packKey(step[1], step[2])]
+                end
+                return path
+            end
+            for _, dir in ipairs(directions) do
+                local nx, ny = node[1] + dir[1], node[2] + dir[2]
+                local nkey = packKey(nx, ny)
+                if cameFrom[nkey] == nil and not isBlocked(nx, ny) then
+                    cameFrom[nkey] = node
+                    queue[#queue + 1] = {nx, ny}
+                end
+            end
+        end
+    end
+    local function getWorldDrops()
+        local wdWorld = getWorld()
+        local wdList = wdWorld and rawget(wdWorld.state, "dropList")
+        if type(wdList) ~= "table" then
+            return nil
+        end
+        local wdResult = {}
+        for _, wdEntry in pairs(wdList) do
+            if type(wdEntry) == "table" then
+                local wdX = rawget(wdEntry, "x") or rawget(wdEntry, "X") or rawget(wdEntry, "px")
+                local wdY = rawget(wdEntry, "y") or rawget(wdEntry, "Y") or rawget(wdEntry, "py")
+                if not (type(wdX) == "number" and type(wdY) == "number") then
+                    wdX, wdY = nil, nil
+                    local wdPos = rawget(wdEntry, "pos") or rawget(wdEntry, "position") or rawget(wdEntry, "p")
+                    local wdPosType = typeof(wdPos)
+                    if wdPosType == "Vector2" or wdPosType == "Vector3" then
+                        wdX, wdY = wdPos.X, wdPos.Y
+                    end
+                end
+                if type(wdX) == "number" and type(wdY) == "number" and wdX >= 0 and wdX <= 100 and wdY >= 0 and wdY <= 60 then
+                    wdResult[#wdResult + 1] = {x = wdX, y = wdY}
+                end
+            end
+        end
+        return wdResult
+    end
+    local dropContainer, lastDeepScan = nil, 0
+    local function getScreenDrops()
+        if not (dropContainer and dropContainer.Parent) then
+            dropContainer = nil
+            local camOk, camFrame = pcall(function()
+                return LocalPlayer.PlayerGui.GameGui.World.Camera
+            end)
+            if camOk and camFrame then
+                for _, camChild in ipairs(camFrame:GetChildren()) do
+                    if camChild.Name == "Drop" then
+                        dropContainer = camFrame
+                        break
+                    end
+                end
+            end
+            if not dropContainer and os.clock() - lastDeepScan > 1 then
+                lastDeepScan = os.clock()
+                for _, guiDesc in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+                    if guiDesc.Name == "Drop" and guiDesc:IsA("GuiObject") then
+                        dropContainer = guiDesc.Parent
+                        break
+                    end
+                end
+            end
+        end
+        local screenDrops = {}
+        if dropContainer then
+            for _, dropChild in ipairs(dropContainer:GetChildren()) do
+                if dropChild.Name == "Drop" and dropChild:IsA("GuiObject") then
+                    screenDrops[#screenDrops + 1] = dropChild
+                end
+            end
+        end
+        return screenDrops
+    end
+    local cHeldKey
+    local function cSendKey(cKeyCode, cPressed)
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(cPressed, cKeyCode, false, game)
+        end)
+    end
+    local function cReleaseKeys()
+        cHeldKey = nil
+        cSendKey(Enum.KeyCode.A, false)
+        cSendKey(Enum.KeyCode.D, false)
+    end
+    local function cHoldKey(cMoveKey)
+        if cHeldKey ~= cMoveKey then
+            cReleaseKeys()
+            cSendKey(cMoveKey, true)
+            cHeldKey = cMoveKey
+        end
+    end
+    local function cJump()
+        cSendKey(Enum.KeyCode.Space, true)
+        task.wait(0.12)
+        cSendKey(Enum.KeyCode.Space, false)
+    end
+    local function cToCell(cPosX, cPosY)
+        return math.floor(cPosX), math.floor(cPosY - 0.001)
+    end
+    local collectRunning, collectSession = false, 0
+    local skipUntil, stuckX, stuckY, stuckTime, stuckJumps = {}, 0, 0, 0, 0
+    local function checkStuck(stuckKey)
+        if not (State.x and State.y) then
+            return
+        end
+        if math.abs(State.x - stuckX) + math.abs(State.y - stuckY) < 0.03 then
+            if os.clock() - stuckTime > 0.8 then
+                cJump()
+                stuckJumps = stuckJumps + 1
+                stuckTime = os.clock()
+                if stuckJumps >= 4 then
+                    cReleaseKeys()
+                    if stuckKey then
+                        skipUntil[stuckKey] = os.clock() + 10
+                    end
+                    stuckJumps = 0
+                end
+            end
+        else
+            stuckX, stuckY, stuckTime, stuckJumps = State.x, State.y, os.clock(), 0
+        end
+    end
+    local collectToggle = createToggle(collectPage, "Auto Collect", false, function(collectEnabled)
+        collectRunning = collectEnabled
+        collectSession = collectSession + 1
+        local cSession = collectSession
+        if not collectEnabled then
+            cReleaseKeys()
+            collectInfo.Text = "Berhenti."
+            setStatus("Collect berhenti", Theme.YEL)
+            return
+        end
+        skipUntil, stuckJumps = {}, 0
+        while collectRunning and cSession == collectSession and ScreenGui.Parent do
+            local worldDrops = getWorldDrops()
+            local target, dropCount = nil, 0
+            if worldDrops then
+                dropCount = #worldDrops
+                if State.x and State.y then
+                    local bestDist
+                    for _, wDrop in ipairs(worldDrops) do
+                        local wKey = math.floor(wDrop.x) .. "," .. math.floor(wDrop.y)
+                        if not (skipUntil[wKey] and skipUntil[wKey] > os.clock()) then
+                            local wDist = math.abs(wDrop.x - State.x) + math.abs(wDrop.y - State.y)
+                            if not bestDist or wDist < bestDist then
+                                target, bestDist = wDrop, wDist
+                            end
+                        end
+                    end
+                end
+            end
+            if target then
+                local targetKey = math.floor(target.x) .. "," .. math.floor(target.y)
+                local deltaX, deltaY = target.x - State.x, target.y - State.y
+                if math.abs(deltaX) < 0.45 and math.abs(deltaY) < 1.3 then
+                    cReleaseKeys()
+                    skipUntil[targetKey] = os.clock() + 2
+                    collectInfo.Text = string.format("Mode dunia | drop %d\nsampai di (%.1f, %.1f)", dropCount, target.x, target.y)
+                    task.wait(0.25)
+                else
+                    local myCellX, myCellY = cToCell(State.x, State.y)
+                    local tgtCellX, tgtCellY = math.floor(target.x), math.floor(target.y)
+                    if isBlocked(tgtCellX, tgtCellY) then
+                        tgtCellY = tgtCellY - 1
+                    end
+                    local route = findPath(myCellX, myCellY, tgtCellX, tgtCellY)
+                    if route and #route >= 2 then
+                        local nextX, nextY = route[2][1], route[2][2]
+                        if nextY == myCellY then
+                            cHoldKey(nextX > myCellX and Enum.KeyCode.D or Enum.KeyCode.A)
+                        elseif nextY < myCellY then
+                            cReleaseKeys()
+                            cJump()
+                            task.wait(0.3)
+                        else
+                            cReleaseKeys()
+                        end
+                        checkStuck(targetKey)
+                    else
+                        cReleaseKeys()
+                        skipUntil[targetKey] = os.clock() + 10
+                    end
+                    collectInfo.Text = string.format("Mode dunia | drop %d\ntarget (%.1f, %.1f) | bot (%.1f, %.1f)", dropCount, target.x, target.y, State.x, State.y)
+                    setStatus("Collect: mengejar item", Theme.ON)
+                end
+            elseif dropCount > 0 then
+                cReleaseKeys()
+                collectInfo.Text = string.format("Mode dunia | drop %d tapi semua dilewati sementara\n(tidak ada jalan atau macet)", dropCount)
+                setStatus("Collect: menunggu", Theme.dm)
+            else
+                local screenList = getScreenDrops()
+                if #screenList == 0 then
+                    cReleaseKeys()
+                    collectInfo.Text = "Tidak ada drop terdeteksi.\ndaftar game: " .. (worldDrops and "kosong" or "tidak terbaca") .. " | frame Drop: 0"
+                    setStatus("Collect: tidak ada item", Theme.dm)
+                else
+                    local nearestPos, nearestDist
+                    for _, sDrop in ipairs(screenList) do
+                        local sCenter = sDrop.AbsolutePosition + sDrop.AbsoluteSize / 2
+                        local sDist = (sCenter - workspace.CurrentCamera.ViewportSize / 2).Magnitude
+                        if not nearestDist or sDist < nearestDist then
+                            nearestPos, nearestDist = sCenter, sDist
+                        end
+                    end
+                    local screenOffsetX = nearestPos.X - workspace.CurrentCamera.ViewportSize.X / 2
+                    local screenKey = screenOffsetX > 12 and Enum.KeyCode.D or screenOffsetX < -12 and Enum.KeyCode.A or nil
+                    if screenKey then
+                        cHoldKey(screenKey)
+                        checkStuck(nil)
+                    else
+                        cReleaseKeys()
+                    end
+                    collectInfo.Text = string.format("Mode layar (cadangan) | frame Drop: %d\njarak X ke item: %.0f px", #screenList, screenOffsetX)
+                    setStatus("Collect: mengejar item (layar)", Theme.ON)
+                end
+            end
+            task.wait(0.05)
+        end
+        cReleaseKeys()
+    end)
+    createNote(collectPage, "Prioritas: koordinat dunia dari state game. Kalau tidak terbaca, memakai frame Drop di layar (cadangan).")
+    StopCallbacks[#StopCallbacks + 1] = function()
+        collectRunning = false
+        collectSession = collectSession + 1
+        cReleaseKeys()
+        collectToggle.set(false, true)
+    end
+end
+do
+    local infoPage = createTab("Info", "ℹ️", "Tentang hub & kontrol")
+    createSection(infoPage, "Tentang")
+    createNote(infoPage, HUB_TITLE .. [[
+ (Farm 5x5 Fixed + Auto Collect).
+• Geser jendela lewat bar atas
+• Tombol – untuk minimize (tombol bulat bisa digeser)
+• RightShift untuk sembunyikan/tampilkan
+• X untuk menutup hub dan menghentikan semua fitur]])
+    createSection(infoPage, "Kontrol")
+    createButton(infoPage, "Hentikan Semua", function()
+        stopAll(false)
+        setStatus("Semua dihentikan", Theme.YEL)
+        notify("Semua fitur dihentikan", Theme.YEL)
+    end, Theme.card2)
+    createButton(infoPage, "Tutup Hub", function()
+        closeHub()
+    end, Theme.RED)
+end
+selectTab("Farm")
+local FloatingButton = create("TextButton", {
+    Size = UDim2.new(0, 46, 0, 46),
+    Position = UDim2.new(0, 14, 0.5, -23),
+    AutoButtonColor = false,
+    BackgroundColor3 = Theme.wh,
+    Text = "J",
+    TextColor3 = Theme.wh,
+    TextSize = 19,
+    Font = Fonts.b,
+    Visible = false,
+}, ScreenGui)
+addCorner(FloatingButton, 23)
+addGradient(FloatingButton, Theme.acc, Theme.acc2, 45)
+addStroke(FloatingButton, Theme.wh, 1.5, 0.3)
+do
+    local function getGlassTransparency(bgColor)
+        if bgColor == Theme.bg then
+            return 0.25
+        end
+        if bgColor == Theme.panel then
+            return 0.38
+        end
+        if bgColor == Theme.card then
+            return 0.52
+        end
+        if bgColor == Theme.card2 then
+            return 0.45
+        end
+    end
+    for _, guiObj in ipairs(ScreenGui:GetDescendants()) do
+        if guiObj:IsA("GuiObject") and guiObj ~= MainFrame and guiObj.BackgroundTransparency < 1 then
+            if guiObj.Parent == TopBar and guiObj.ClassName == "Frame" then
+                guiObj.BackgroundTransparency = 1
+            else
+                local glassAlpha = getGlassTransparency(guiObj.BackgroundColor3)
+                if glassAlpha then
+                    guiObj.BackgroundTransparency = glassAlpha
+                end
+            end
+        end
+    end
+    MainFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    MainFrame.BackgroundTransparency = 0.2
+    pcall(function()
+        local mainGradient = Instance.new("UIGradient")
+        mainGradient.Color = ColorSequence.new(Color3.fromRGB(46, 40, 96), Color3.fromRGB(12, 12, 24))
+        mainGradient.Rotation = 55
+        mainGradient.Parent = MainFrame
+    end)
+    local mainStroke = MainFrame:FindFirstChildOfClass("UIStroke")
+    if mainStroke then
+        mainStroke.Color = Theme.wh
+        mainStroke.Transparency = 0.72
+        mainStroke.Thickness = 1.2
+    end
+    task.spawn(function()
+        local logoImage, logoError = getLogoImage()
+        if not logoImage then
+            if logoError then
+                notify("Logo: " .. logoError, Theme.YEL)
+            end
+            return
+        end
+        local function applyLogo(logoParent, logoRadius)
+            local logoImg = Instance.new("ImageLabel")
+            logoImg.Size = UDim2.new(1, 0, 1, 0)
+            logoImg.BackgroundTransparency = 1
+            logoImg.Image = logoImage
+            logoImg.ScaleType = Enum.ScaleType.Crop
+            logoImg.ZIndex = 5
+            logoImg.Parent = logoParent
+            addCorner(logoImg, logoRadius)
+        end
+        LogoLabel.Text = ""
+        applyLogo(LogoLabel, 9)
+        FloatingButton.Text = ""
+        applyLogo(FloatingButton, 23)
+    end)
+end
+local isAnimating = false
+local function showMain()
+    if isAnimating then
+        return
+    end
+    MainFrame.Visible = true
+    FloatingButton.Visible = false
+    MainScale.Scale = UI_SCALE * 0.85
+    tween(MainScale, 0.28, {Scale = UI_SCALE}, Enum.EasingStyle.Back)
+end
+local function hideMain()
+    if isAnimating or not MainFrame.Visible then
+        return
+    end
+    isAnimating = true
+    tween(MainScale, 0.16, {Scale = UI_SCALE * 0.85})
+    task.delay(0.16, function()
+        MainFrame.Visible = false
+        FloatingButton.Visible = true
+        isAnimating = false
+    end)
+end
+makeDraggable(TopBar, MainFrame)
+makeDraggable(FloatingButton, FloatingButton, showMain)
+MinimizeButton.Activated:Connect(hideMain)
+function closeHub()
+    stopAll(true)
+    releaseMoveKeys()
+    for _, hubConn in ipairs(Connections) do
+        pcall(function()
+            hubConn:Disconnect()
+        end)
+    end
+    tween(MainScale, 0.18, {Scale = UI_SCALE * 0.8})
+    task.delay(0.2, function()
+        pcall(function()
+            ScreenGui:Destroy()
+        end)
+    end)
+end
+getgenv().HubStop = closeHub
+CloseButton.Activated:Connect(closeHub)
+Connections[#Connections + 1] = UserInputService.InputBegan:Connect(function(keyInput, gameProcessed)
+    if gameProcessed then
+        return
+    end
+    if keyInput.KeyCode == Enum.KeyCode.RightShift then
+        if MainFrame.Visible then
+            hideMain()
+        else
+            showMain()
+        end
+    end
+end)
+MainScale.Scale = UI_SCALE * 0.85
+tween(MainScale, 0.3, {Scale = UI_SCALE}, Enum.EasingStyle.Back)
+notify(HUB_TITLE .. " siap", Theme.acc)
+print(HUB_TITLE .. " siap (Farm + Collect + Info)")
